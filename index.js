@@ -9,6 +9,22 @@ var Feed = require('feed');
 // caches the result from a channel list request to avoid asynchronous lookups when title-less channels are mentioned in message texts
 var channelsByIdCache = {};
 
+function makeResponseCache(getter) {
+	var cache = { time: 0, promise: null };
+	return function() {
+		var now = Date.now();
+		if (now - cache.time > 60000) {
+			cache.time = now;
+			cache.promise = getter();
+		}
+		return cache.promise;
+	}
+}
+
+var getTeamInfo = makeResponseCache(() => slack.team.info());
+var getUsersList = makeResponseCache(() => slack.users.list());
+var getImList = makeResponseCache(() => slack.im.list());
+
 function escapeHTML(s) {
 	return s.replace(/[&"<>]/g, function (c) {
 		return {
@@ -195,7 +211,7 @@ function channelItem(channel, usersById, team, feedUrl) {
 }
 
 app.get('/channels.xml', (req, res) => {
-	Promise.all([slack.channels.list(), slack.groups.list(), slack.im.list(), slack.team.info(), slack.users.list()])
+	Promise.all([slack.channels.list(), slack.groups.list(), getImList(), getTeamInfo(), getUsersList()])
 	.then(args => {
 		var channels = args[0].channels;
 		var groups = args[1].groups;
@@ -257,7 +273,7 @@ app.get('/channel.xml', (req, res) => {
 		res.status(404).send('id parameter needed\n');
 	}
 	else if (channelid.startsWith('C')) {
-		Promise.all([slack.channels.info(channelid), slack.channels.history(channelid, {count: count}), slack.team.info(), slack.users.list()])
+		Promise.all([slack.channels.info(channelid), slack.channels.history(channelid, {count: count}), getTeamInfo(), getUsersList()])
 		.then(args => {
 			info = args[0].channel;
 			info.name_display_prefix = '#';
@@ -268,7 +284,7 @@ app.get('/channel.xml', (req, res) => {
 		});
 	}
 	else if (channelid.startsWith('G')) {
-		Promise.all([slack.groups.info(channelid), slack.groups.history(channelid, {count: count}), slack.team.info(), slack.users.list()])
+		Promise.all([slack.groups.info(channelid), slack.groups.history(channelid, {count: count}), getTeamInfo(), getUsersList()])
 		.then(args => {
 			info = args[0].group;
 			info.name_display_prefix = info.is_mpim ? '' : '=';
@@ -279,7 +295,7 @@ app.get('/channel.xml', (req, res) => {
 		});
 	}
 	else if (channelid.startsWith('D')) {
-		Promise.all([slack.im.list(), slack.im.history(channelid, {count: count}), slack.team.info(), slack.users.list()])
+		Promise.all([getImList(), slack.im.history(channelid, {count: count}), getTeamInfo(), getUsersList()])
 		.then(args => {
 			var info = { id: channelid, name: 'unknown IM', name_display_prefix: '@' };
 			for (var i of args[0].ims) {
