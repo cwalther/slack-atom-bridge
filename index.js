@@ -2,7 +2,19 @@ var express = require('express');
 var app = express();
 
 var WebClient = require('@slack/client').WebClient;
-var slack = new WebClient('your-token-here');
+
+var config = {
+	'fablabwinti': {
+		token: 'your-token-here',
+		port: 8283
+	},
+	'fablabzurich': {
+		token: 'your-token-here',
+		port: 8284
+	}
+}[process.argv[2]];
+
+var slack = new WebClient(config.token);
 
 var Feed = require('feed');
 
@@ -320,6 +332,6 @@ app.get('/channel.xml', (req, res) => {
 	}
 });
 
-app.listen(8283, () => {
-	console.log('listening on port 8283');
+app.listen(config.port, () => {
+	console.log('listening on port ' + config.port);
 });
