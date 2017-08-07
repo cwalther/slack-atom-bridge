@@ -1,18 +1,11 @@
+var fs = require('fs');
+
 var express = require('express');
 var app = express();
 
 var WebClient = require('@slack/client').WebClient;
 
-var config = {
-	'fablabwinti': {
-		token: 'your-token-here',
-		port: 8283
-	},
-	'fablabzurich': {
-		token: 'your-token-here',
-		port: 8284
-	}
-}[process.argv[2]];
+var config = JSON.parse(fs.readFileSync(process.argv[2]));
 
 var slack = new WebClient(config.token);
 
