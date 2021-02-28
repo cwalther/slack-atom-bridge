@@ -103,8 +103,8 @@ function sendChannelFeed(req, res, count, info, messages, team, users) {
 	for (var u of users) usersById[u.id] = u;
 	
 	if (!info.name) {
-		// happens on IMs (FIXME not good for links)
-		info.name = usersById[info.user].name;
+		// happens on IMs; this replacement is good for links, not so much for human-readable places
+		info.name = info.id;
 	}
 	
 	items = [];
@@ -159,7 +159,7 @@ function sendChannelFeed(req, res, count, info, messages, team, users) {
 	items.sort((i1, i2) => (i1.date < i2.date) ? 1 : (i1.date > i2.date) ? -1 : 0);
 	
 	feed = new Feed({
-		title: 'Slack / ' + team.name + ' / ' + info.name_display_prefix + info.name,
+		title: 'Slack / ' + team.name + ' / ' + info.name_display_prefix + (info.is_im ? usersById[info.user].name : info.name),
 		link: 'https://' + team.domain + '.slack.com/archives/' + info.name,
 		id: 'https://' + team.domain + '.slack.com/archives/' + info.name,
 		feed: 'http://' + (req.headers.host || 'localhost') + '/channel.xml?id=' + info.id + '&count=' + count,
@@ -205,7 +205,7 @@ function channelItem(channel, usersById, team, feedUrl) {
 		author = usersById[channel.user];
 		content = '<p><strong>Direct Message Channel:</strong> ' + (author.real_name || author.name) + '</p>';
 		title = '@' + author.name;
-		weblink = 'https://' + team.domain + '.slack.com/archives/' + author.name;
+		weblink = 'https://' + team.domain + '.slack.com/archives/' + channel.id;
 	}
 	else {
 		content = '<p><strong>Channel:</strong> #' + channel.name + '</p>';
