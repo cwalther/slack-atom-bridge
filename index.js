@@ -95,7 +95,7 @@ function processMessageText(text, rich, usersById, team) {
 		rich
 		? (m, link, g2, title) => '<a href="' + link + '">' + (title || link) + '</a>'
 		: (m, link, g2, title) => (title || link)
-	).replace(/\n/g, '<br>');
+	).replace(/\r?\n/g, '<br>');
 }
 
 function sendChannelFeed(req, res, count, info, messages, team, users) {
@@ -212,14 +212,14 @@ function channelItem(channel, usersById, team, feedUrl) {
 		title = '#' + channel.name
 	}
 	if (channel.topic && channel.topic.value) {
-		content += '<p><strong>Topic:</strong> ' + channel.topic.value;
+		content += '<p><strong>Topic:</strong> ' + processMessageText(channel.topic.value, true, usersById, team);
 		if (channel.topic.creator && channel.topic.last_set) {
 			content += ' <span style="font-size: 80%; color: #666666;">(' + usersById[channel.topic.creator].name + ', ' + new Date(1000*channel.topic.last_set).toISOString().substring(0,10) + ')</span>';
 		}
 		content += '</p>';
 	}
 	if (channel.purpose && channel.purpose.value) {
-		content += '<p><strong>Purpose:</strong> ' + channel.purpose.value;
+		content += '<p><strong>Purpose:</strong> ' + processMessageText(channel.purpose.value, true, usersById, team);
 		if (channel.purpose.creator && channel.purpose.last_set) {
 			content += ' <span style="font-size: 80%; color: #666666;">(' + usersById[channel.purpose.creator].name + ', ' + new Date(1000*channel.purpose.last_set).toISOString().substring(0,10) + ')</span>';
 		}
