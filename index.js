@@ -133,7 +133,7 @@ function sendChannelFeed(req, res, count, info, messages, team, users) {
 		}
 		items.push({
 			author: [{
-				name: author.real_name + ' (' + author.name + ')',
+				name: author.real_name ? (author.real_name + ' (' + author.name + ')') : author.name,
 				email: author.profile.email,
 				link: 'https://' + team.domain + '.slack.com/team/' + author.name
 			}],
@@ -191,7 +191,7 @@ function channelItem(channel, usersById, team, feedUrl) {
 		var first = true;
 		for (var m of channel.members) {
 			if (!first) content += ', ';
-			content += usersById[m].real_name;
+			content += (usersById[m].real_name || usersById[m].name);
 			first = false;
 		}
 		content += '</p>';
@@ -203,7 +203,7 @@ function channelItem(channel, usersById, team, feedUrl) {
 	}
 	else if (channel.is_im) {
 		author = usersById[channel.user];
-		content = '<p><strong>Direct Message Channel:</strong> ' + author.real_name + '</p>';
+		content = '<p><strong>Direct Message Channel:</strong> ' + (author.real_name || author.name) + '</p>';
 		title = '@' + author.name;
 		weblink = 'https://' + team.domain + '.slack.com/archives/' + author.name;
 	}
@@ -233,7 +233,7 @@ function channelItem(channel, usersById, team, feedUrl) {
 	content += '</p>';
 	return {
 		author: [{
-			name: author.real_name + ' (' + author.name + ')',
+			name: author.real_name ? (author.real_name + ' (' + author.name + ')') : author.name,
 			email: author.profile.email,
 			link: 'https://' + team.domain + '.slack.com/team/' + author.name
 		}],
