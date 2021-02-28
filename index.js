@@ -31,7 +31,7 @@ var config = JSON.parse(fs.readFileSync(process.argv[2]));
 
 var slack = new WebClient(config.token);
 
-var Feed = require('feed');
+var Feed = require('feed').Feed;
 
 // caches the result from a channel list request to avoid asynchronous lookups when title-less channels are mentioned in message texts
 var channelsByIdCache = {};
@@ -168,7 +168,7 @@ function sendChannelFeed(req, res, count, info, messages, team, users) {
 	});
 	for (var i of items) feed.addItem(i);
 	
-	res.type('application/atom+xml').send(feed.render('atom-1.0'));
+	res.type('application/atom+xml').send(feed.atom1());
 }
 
 function channelItem(channel, usersById, team, feedUrl) {
@@ -289,7 +289,7 @@ app.get('/channels.xml', (req, res) => {
 		});
 		for (var i of items) feed.addItem(i);
 		
-		res.type('application/atom+xml').send(feed.render('atom-1.0'));
+		res.type('application/atom+xml').send(feed.atom1());
 	})
 	.catch(e => {
 		res.status(500).send(e.toString() + '\n' + e.stack);
