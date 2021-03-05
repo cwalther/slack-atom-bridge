@@ -25,7 +25,7 @@ var fs = require('fs');
 var express = require('express');
 var app = express();
 
-var WebClient = require('@slack/client').WebClient;
+var WebClient = require('@slack/web-api').WebClient;
 
 var config = JSON.parse(fs.readFileSync(process.argv[2]));
 
@@ -50,7 +50,6 @@ function makeResponseCache(getter) {
 
 var getTeamInfo = makeResponseCache(() => slack.team.info());
 var getUsersList = makeResponseCache(() => slack.users.list());
-var getImList = makeResponseCache(() => slack.im.list());
 
 function escapeHTML(s) {
 	return s.replace(/[&"<>]/g, function (c) {
@@ -103,6 +102,11 @@ function sendChannelFeed(req, res, count, info, messages, team, users) {
 	var usersById = {};
 	for (var u of users) usersById[u.id] = u;
 	
+	if (!info.name) {
+		// happens on IMs (FIXME not good for links)
+		info.name = usersById[info.user].name;
+	}
+	
 	items = [];
 	for (var message of messages) {
 		var title = processMessageText(message.text || '', false, usersById, team);
@@ -123,6 +127,9 @@ function sendChannelFeed(req, res, count, info, messages, team, users) {
 		var content = '<p>' + processMessageText(message.text || '', true, usersById, team) + '</p>';
 		if (message.subtype) {
 			content += '<p style="font-size: 80%; color: #666666;">' + message.subtype + '</p>';
+		}
+		if (message.parent_user_id) {
+			content += '<p style="font-size: 80%; color: #666666;">reply to ' + (usersById[message.parent_user_id].real_name || usersById[message.parent_user_id].name)  + '</p>';
 		}
 		items.push({
 			author: [{
@@ -238,14 +245,16 @@ function channelItem(channel, usersById, team, feedUrl) {
 }
 
 app.get('/channels.xml', (req, res) => {
-	Promise.all([slack.channels.list(), slack.groups.list(), getImList(), getTeamInfo(), getUsersList()])
-	.then(args => {
-		var channels = args[0].channels;
-		var groups = args[1].groups;
-		var ims = args[2].ims;
-		var team = args[3].team;
-		var users = args[4].members;
-		
+	Promise.all([
+		// for mpims we additionally want the members - the old groups.list API included that, but conversations.list does not
+		slack.conversations.list({types: 'public_channel,private_channel,mpim,im'})
+		.then(result => Promise.all(result.channels.filter(c => c.is_mpim).map(c => slack.conversations.members({channel: c.id}).then(m => { c.members = m.members; })))
+			.then(_ => result)
+		),
+		getTeamInfo(),
+		getUsersList()
+	])
+	.then(([{channels}, {team}, {members: users}]) => {
 		for (var channel of channels) channelsByIdCache[channel.id] = channel;
 		
 		var usersById = {};
@@ -256,12 +265,6 @@ app.get('/channels.xml', (req, res) => {
 		items = [];
 		for (var channel of channels) {
 			items.push(channelItem(channel, usersById, team, feedUrl));
-		}
-		for (var group of groups) {
-			items.push(channelItem(group, usersById, team, feedUrl));
-		}
-		for (var im of ims) {
-			items.push(channelItem(im, usersById, team, feedUrl));
 		}
 		items.sort((i1, i2) => (i1.date < i2.date) ? 1 : (i1.date > i2.date) ? -1 : 0);
 		
@@ -290,6 +293,7 @@ app.get('/channels.xml', (req, res) => {
 	})
 	.catch(e => {
 		res.status(500).send(e.toString() + '\n' + e.stack);
+		console.log('Error building channels.xml:', e);
 	});
 });
 
@@ -299,51 +303,36 @@ app.get('/channel.xml', (req, res) => {
 	if (!channelid) {
 		res.status(404).send('id parameter needed\n');
 	}
-	else if (channelid.startsWith('C')) {
-		Promise.all([slack.channels.info(channelid), slack.channels.history(channelid, {count: count}), getTeamInfo(), getUsersList()])
-		.then(args => {
-			info = args[0].channel;
-			info.name_display_prefix = '#';
-			sendChannelFeed(req, res, count, info, args[1].messages, args[2].team, args[3].members);
-		})
-		.catch(e => {
-			res.status(500).send(e.toString() + '\n' + e.stack);
-		});
-	}
-	else if (channelid.startsWith('G')) {
-		Promise.all([slack.groups.info(channelid), slack.groups.history(channelid, {count: count}), getTeamInfo(), getUsersList()])
-		.then(args => {
-			info = args[0].group;
-			info.name_display_prefix = info.is_mpim ? '' : '=';
-			sendChannelFeed(req, res, count, info, args[1].messages, args[2].team, args[3].members);
-		})
-		.catch(e => {
-			res.status(500).send(e.toString() + '\n' + e.stack);
-		});
-	}
-	else if (channelid.startsWith('D')) {
-		Promise.all([getImList(), slack.im.history(channelid, {count: count}), getTeamInfo(), getUsersList()])
-		.then(args => {
-			var info = { id: channelid, name: 'unknown IM', name_display_prefix: '@' };
-			for (var i of args[0].ims) {
-				if (i.id == channelid) {
-					for (var u of args[3].members) {
-						if (u.id == i.user) {
-							info.name = u.name;
-							break;
-						}
-					}
-					break;
-				}
-			}
-			sendChannelFeed(req, res, count, info, args[1].messages, args[2].team, args[3].members);
-		})
-		.catch(e => {
-			res.status(500).send(e.toString() + '\n' + e.stack);
-		});
-	}
 	else {
-		res.status(404).send('unknown id type ' + channelid + '\n');
+		Promise.all([
+			slack.conversations.info({channel: channelid}),
+			// for thread parents we additionally want the replies - the old channels.history API included those, but conversations.history does not
+			// Note that this means we will miss new replies to old threads whose parent has already dropped out - I don't see any way around this in the API docs.
+			slack.conversations.history({channel: channelid, count: count})
+			.then(
+				result => Promise.all(result.messages.filter(m => m.thread_ts !== undefined).map(
+					m => slack.conversations.replies({channel: channelid, ts: m.thread_ts, limit: count})
+					.then(replies => {
+						for (var m of replies.messages) {
+							if (!result.messages.find(rm => rm.ts == m.ts)) {
+								result.messages.push(m);
+							}
+						}
+					})
+				))
+				.then(_ => result)
+			),
+			getTeamInfo(),
+			getUsersList()
+		])
+		.then(([{channel}, {messages}, {team}, {members}]) => {
+			info = channel;
+			info.name_display_prefix = channelid.startsWith('C') ? '#' : channelid.startsWith('D') ? '@' : channel.is_mpim ? '' : channelid.startsWith('G') ? '=' : '?';
+			sendChannelFeed(req, res, count, info, messages, team, members);
+		})
+		.catch(e => {
+			res.status(500).send(e.toString() + '\n' + e.stack);
+		});
 	}
 });
 
