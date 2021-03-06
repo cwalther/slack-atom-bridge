@@ -25,7 +25,7 @@ var fs = require('fs');
 var express = require('express');
 var app = express();
 
-var WebClient = require('@slack/web-api').WebClient;
+var { WebClient, ErrorCode } = require('@slack/web-api');
 
 var config = JSON.parse(fs.readFileSync(process.argv[2]));
 
@@ -331,7 +331,20 @@ app.get('/channel.xml', (req, res) => {
 			sendChannelFeed(req, res, count, info, messages, team, members);
 		})
 		.catch(e => {
-			res.status(500).send(e.toString() + '\n' + e.stack);
+			if (e.code === ErrorCode.PlatformError) {
+				if (e.data.error === 'channel_not_found') {
+					res.status(404).send('Channel not found: ' + channelid);
+					console.log('Channel not found: ' + channelid);
+				}
+				else {
+					res.status(500).send(e.data);
+					console.log('PlatformError building channel.xml?id=' + channelid + ':', e.data);
+				}
+			}
+			else {
+				res.status(500).send(e.toString() + '\n' + e.stack);
+				console.log('Error building channel.xml?id=' + channelid + ':', e);
+			}
 		});
 	}
 });
