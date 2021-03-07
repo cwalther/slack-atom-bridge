@@ -167,7 +167,7 @@ function sendChannelFeed(req, res, count, info, messages, team, users) {
 			for (f of message.files) {
 				content += '<li>';
 				if (f.thumb_tiny) content += '<img src="' + decodeTinyThumb(f.thumb_tiny) + '" style="vertical-align: middle;"> ';
-				content += '<strong>' + escapeHTML(f.title || f.name) + '</strong> &nbsp;•&nbsp; <em title="' + escapeHTML(f.filetype + ', ' + f.mimetype + ', ' + f.size + 'B') + '">' + f.pretty_type + '</em>';
+				content += '<strong>' + escapeHTML(f.title || f.name || f.mode || 'untitled') + '</strong> &nbsp;•&nbsp; <em title="' + escapeHTML(f.filetype + ', ' + f.mimetype + ', ' + f.size + 'B') + '">' + f.pretty_type + '</em>';
 				if (f.original_w && f.original_h) content += ' ' + f.original_w + '×' + f.original_h;
 				if (f.url_private) content += ' &nbsp;•&nbsp; <a href="' + escapeHTML(f.url_private) + '">private</a>';
 				if (f.permalink) content += ' &nbsp;•&nbsp; <a href="' + escapeHTML(f.permalink) + '">permalink</a>';
