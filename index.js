@@ -29,7 +29,7 @@ var { WebClient, ErrorCode } = require('@slack/web-api');
 
 var config = JSON.parse(fs.readFileSync(process.argv[2]));
 
-var slack = new WebClient(config.token);
+var slack = new WebClient(config.token, { retryConfig: { minTimeout: 10000, retries: 1, factor: 2, randomize: true }});
 
 var Feed = require('feed').Feed;
 
